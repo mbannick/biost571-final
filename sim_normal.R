@@ -137,7 +137,7 @@ fit<-gee(outcome ~ x1 + x2,
 ################################################################
 
 # initialize
-beta <- matrix(c(1, 2, 3), nrow = 3, ncol = 1) 
+beta <- matrix(c(1, 2, 3), nrow = 3, ncol = 1)
 X <- as.matrix(simp_dat[,c('x0','x1','x2')])
 Y <- simp_dat$outcome
 phi <- sd(Y)
@@ -147,36 +147,35 @@ alpha <-0
 
 # iterate
 for (q in 1:10){
-  
-  # update phi 
+  cat(".")
+  # update phi
   resi<-Y-X %*% beta
   p_resi<-(Y-X %*% beta)/sqrt(phi)
   phi<-sum(resi^2)/(n_obs-p_df)
-  
-  # for updating alpha 
+
+  # for updating alpha
   resi_sum <- 0
   n_alpha <- 0
-  
+
   # update GEE
   score <- matrix(0,nrow=length(beta),ncol=1)
   hes_gee <- matrix(0,nrow=length(beta),ncol=length(beta))
 
   for ( id in 1: m){
-    
     # individual contribution to the score and hessian
-    
+
     # subject specific data
     one_sub<-simp_dat[simp_dat$id==id,]
     X_i <- as.matrix(one_sub[, c('x0','x1','x2')])
     Y_i <- one_sub$outcome
     ni <- length(Y_i)
-    
+
     # working correlation
     R_i <- matrix(alpha,nrow=ni,ncol=ni)
     diag(R_i) <- 1
     Vm_i <- diag(ni)*phi
     V_i <- sqrtm(Vm_i) %*% R_i %*% sqrtm(Vm_i)
-    
+
     # score and hessian
     resi_i <- Y_i - X_i %*% beta
     score_i <- (-t(X_i)) %*% solve(V_i) %*% resi_i
@@ -184,25 +183,25 @@ for (q in 1:10){
 
     score <- score+score_i
     hes_gee <- hes_gee+hes_gee_i
-    
+
     # for updating alpha
     p_resi<-(Y_i-X_i %*% beta)/sqrt(phi)
-    
+
     if(ni>1){
     pairs <- combn(1:ni,2)
     resi_sum  <- resi_sum+
                 sum(p_resi[pairs[1,]]*p_resi[pairs[2,]])
     n_alpha <- n_alpha+ dim(pairs)[2]
     }
-    
+
   }
 
   # update beta
   beta <- beta - solve(hes_gee) %*% score
-  
+
   # update alpha
   alpha <- resi_sum/(n_alpha-p_df)
-    
+
 }
 
 
@@ -217,10 +216,15 @@ sum(beta)
 
 
 # initialize
-beta <- matrix(c(1, 2, 3), nrow = 3, ncol = 1) 
+beta <- matrix(c(1, 2, 3), nrow = 3, ncol = 1)
 A <- matrix(rep(1, 3), nrow = 1, ncol = 3)
 eta <- 1
 rho <- 100 ## too small can't converge?
+
+# ADDED BRIDGE PENALTY
+# If you want to run non-penalized regression, set lambda = 0
+lambda <- 5
+gamma <- 2 # corresponding to ridge regression
 
 X <- as.matrix(simp_dat[,c('x0','x1','x2')])
 Y <- simp_dat$outcome
@@ -232,70 +236,78 @@ alpha <- 0
 
 # iterate
 for (q in 1:30){
-  
-  # update phi 
+
+  # update phi
   resi<-Y-X %*% beta
   p_resi<-(Y-X %*% beta)/sqrt(phi)
   phi<-sum(resi^2)/(n_obs-p_df)
-  
-  # for updating alpha 
+
+  # for updating alpha
   resi_sum <- 0
   n_alpha <- 0
-  
+
   # update gee
   score_gee <- matrix(0,nrow=length(beta),ncol=1)
   hes_gee <- matrix(0,nrow=length(beta),ncol=length(beta))
-  
+
   for ( id in 1:m){
-    
+
     # individual contribution to the score and hessian
-    
+
     # subject specific data
     one_sub<-simp_dat[simp_dat$id==id,]
     X_i <- as.matrix(one_sub[, c('x0','x1','x2')])
     Y_i <- one_sub$outcome
     ni <- length(Y_i)
-    
+
     # working correlation
     R_i <- matrix(alpha,nrow=ni,ncol=ni)
     diag(R_i) <- 1
     Vm_i <- diag(ni)*phi
     V_i <- sqrtm(Vm_i) %*% R_i %*% sqrtm(Vm_i)
-    
+
     # score and hessian
     resi_i <- Y_i - X_i %*% beta
     score_i <- (-t(X_i)) %*% solve(V_i) %*% resi_i
     hes_gee_i <- t(X_i) %*% solve(V_i) %*% X_i
-    
+
     score_gee <- score_gee+score_i
     hes_gee <- hes_gee+hes_gee_i
-    
+
     # for updating alpha
     p_resi<-(Y_i-X_i %*% beta)/sqrt(phi)
-    
+
     if(ni>1){
       pairs <- combn(1:ni,2)
       resi_sum  <- resi_sum+
         sum(p_resi[pairs[1,]]*p_resi[pairs[2,]])
       n_alpha <- n_alpha+ dim(pairs)[2]
     }
-    
+
   }
-  
+
   score <- score_gee + t(A) %*% eta + rho * t(A) %*% A %*% beta
+  # Add in the bridge penalty
+  bridge.score <- lambda * gamma * sign(beta) * abs(beta)**(gamma - 1)
+  score <- score + bridge.score
   hes <- hes_gee + rho * t(A) %*% A
-  
-  
+  bridge.hes <- diag(c(lambda * gamma * (gamma - 1) * abs(beta)**(gamma - 2)))
+  # note that we technically have sign(beta) * sign(beta), but this is always 1
+  hes <- hes + bridge.hes
+
   # update beta and eta
   beta <- beta - solve(hes) %*% score
-  eta <- eta + rho * A %*% beta 
-  
+  eta <- eta + rho * A %*% beta
+
   # update alpha
   alpha <- resi_sum/(n_alpha-p_df)
-  
+
   print(beta)
   print(sum(beta))
+  print(sum(abs(beta)**gamma))
 }
 
 beta
 sum(beta)
+sum(abs(beta))
+sum(beta**2)
