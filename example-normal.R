@@ -118,8 +118,9 @@ Y <- data$outcome
 
 source("fit-gee.R")
 
-# PLAIN
-fit.gee(y=Y, X=X, id=data$id, link='identity', corstr='identity', verbose=T,
+fit.gee(y=Y, X=X, id=data$id, link='identity', corstr='exchangeable', verbose=T)
+
+fit.gee(y=Y, X=X, id=data$id, link='identity', corstr='exchangeable', verbose=T,
         constrain=TRUE, rho=100)
 
 fit.gee(y=Y, X=X, id=data$id, link='identity', corstr='exchangeable', verbose=T,

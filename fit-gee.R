@@ -153,9 +153,7 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
 
           # ** INDEPENDENT NORMAL **
           # ------------------------
-          # print(dim(t(X_i)))
-          # print(dim(res_i))
-          # if(dim(res_i) != c(1, 1)) browser()
+
           score_i <- (-t(X_i)) %*% res_i
           hess_i <- t(X_i) %*% X_i
 
@@ -193,7 +191,7 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
         # HESSIAN
         if(ni==1){
           hess_i <- t(X_i) %*% X_i * as.numeric(mu_i2)
-        }else{
+        } else {
           hess_i <- t(X_i) %*% diag(as.vector(mu_i2)) %*% X_i
         }
 
@@ -271,6 +269,86 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
 
   }
 
+  # SANDWICH VARIANCE ESTIMATION ----------------------
+
+  cat("Computing sandwich variance", "\n")
+
+  model_based <- matrix(data=0, nrow=p_df, ncol=p_df)
+  empirical <- matrix(data=0, nrow=p_df, ncol=p_df)
+
+  for(i in 1:m){
+
+    # SUBSET THE DATA ---------------------------------
+    indices <- id == i
+    X_i <- X[indices, ]
+    if(sum(indices) == 1) X_i <- t(as.matrix(X_i))
+    y_i <- y[indices]
+    ni <- length(y_i)
+
+    # Get the linear predictor
+    nu_i <- X_i %*% beta
+
+    if(normal){
+
+      # RESIDUAL
+      res_i <- y_i - nu_i
+
+      if(indep){
+
+        # ** INDEPENDENT NORMAL **
+        # ------------------------
+
+        # Calculate model-based and empirical variance
+        model_based <- model_based + t(X_i) %*% X_i
+        empirical <- empirical + t(X_i) %*% res_i %*% t(res_i) %*% X_i
+
+      } else {
+
+        # ** EXCHANGEABLE NORMAL **
+        # -------------------------
+
+        # Calculate the variance
+        # matrix with correlations
+        R_i <- matrix(alpha, nrow=ni, ncol=ni)
+        diag(R_i) <- 1
+        Vm_i <- diag(ni) * phi
+        V_i <- sqrtm(Vm_i) %*% R_i %*% sqrtm(Vm_i)
+
+        # inverse to save computational time
+        V_ii <- solve(V_i)
+
+        # Calculate model-based and empirical variance
+        model_based <- model_based + t(X_i) %*% V_ii %*% X_i
+        empirical <- empirical + t(X_i) %*% V_ii %*% res_i %*% t(res_i) %*% V_ii %*% X_i
+
+      }
+    } else {
+
+      # ** INDEPENDENT LOGISTIC **
+      # --------------------------
+
+      # MEAN FUNCTION
+      mu_i <- exp(nu_i)/(1 + exp(nu_i))
+      mu_i2 <- mu_i * (1 - mu_i)
+
+      # RESIDUAL
+      res_i <- y_i - mu_i
+
+      if(ni==1){
+        Dt <- as.numeric(mu_i2) * X_i
+      } else {
+        Dt <- diag(as.vector(mu_i2)) %*% X_i
+      }
+
+      # Calculate model-based and empirical variance
+      model_based <- model_based + t(X_i) %*% Dt
+      empirical <- empirical + t(X_i) %*% res_i %*% t(res_i) %*% X_i
+
+    }
+  }
+
+  covar <- solve(model_based) %*% empirical %*% solve(model_based)
+
   print("Exiting.")
   if(success){
     cat("Converged with parameters", beta, "\n")
@@ -286,7 +364,8 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
     eta=eta,
     phi=phi,
     success=success,
-    error=error
+    error=error,
+    vcov=covar
   ))
 
 }
