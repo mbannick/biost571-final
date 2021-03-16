@@ -44,6 +44,8 @@ args <- commandArgs(trailingOnly=TRUE, asValues=TRUE,
                       directory="."
                     ))
 
+print(args)
+
 # CONVERT COMMAND-LINE ARGUMENTS ------------------
 
 if(is.null(args$rho)){
@@ -152,7 +154,7 @@ if(args$fit_link == "identity"){
   residual.is <- y - X %*% fit$beta
   mse.is <- mean(residual.is**2)**0.5
 
-  residual.os <- y.os - X.os %*% fit$beta
+  residual.os <- y.os - X.os %*% fit.oos$beta
   mse.os <- mean(residual.os**2)**0.5
 
 } else {
@@ -161,7 +163,7 @@ if(args$fit_link == "identity"){
   class.is <- nu.is >= 0.5
   mse.is <- sum(class.is == y) / length(y)
 
-  nu.os <- exp(X.os %*% fit$beta)/(1 + exp(X.os %*% fit$beta))
+  nu.os <- exp(X.os %*% fit.oos$beta)/(1 + exp(X.os %*% fit.oos$beta))
   class.os <- nu.os >= 0.5
   mse.os <- sum(class.os == y.os) / length(y.os)
 
@@ -224,8 +226,10 @@ df.results <- data.table(
 )
 
 # Create a unique filename for the simulation
+directory <- args$directory
+args$directory <- NULL
 filename <- do.call(paste, args)
 filename <- gsub(" ", "_", filename)
 
 # Save data
-write.csv(df.results, paste0(args$directory, filename, ".csv"))
+write.csv(df.results, paste0(directory, filename, ".csv"))
