@@ -16,7 +16,7 @@ source("sim_dat_with_logistic.R")
 
 args <- commandArgs(trailingOnly=TRUE)
 sim <- args[1]
-# sim <- 1
+directory <- args[2]
 
 set.seed(sim)
 
@@ -236,8 +236,6 @@ for(n_sub in n_sub.list){
 }
 
 # Create a unique filename for the simulation
-directory <- args$directory
-args$directory <- NULL
 filename <- paste0("simulation_", sim, ".csv")
 
 # Save data
