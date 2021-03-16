@@ -21,7 +21,7 @@
 #' @param verbose Whether or not want information printed at each iteration
 fit.gee <- function(y, X, id, link='identity', corstr='independence',
                     constrain=FALSE, rho=NA, gamma=NA, lambda=NA,
-                    tol=1e-5, maxiter=500, verbose=FALSE){
+                    tol=1e-5, maxiter=500, verbose=FALSE, variance=FALSE){
 
   # DATA ATTRIBUTES -------------------------------------
 
@@ -33,6 +33,8 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
 
   # Number of individuals
   m <- length(unique(id))
+
+  ids <- unique(id)
 
   # CORRELATION STRUCTURE -------------------------------
 
@@ -67,8 +69,8 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
     bridge <- gamma >= 2
   }
 
-  if(lasso) print("Implementing LASSO penalty")
-  if(bridge) print(paste0("Implementing bridge penalty with gamma = ", gamma))
+  if(lasso) print(paste0("Implementing LASSO penalty with lambda = ", lambda))
+  if(bridge) print(paste0("Implementing bridge penalty with lambda = ", lambda))
 
   # CONSTRAINTS -----------------------------------------
   if(constrain){
@@ -79,7 +81,6 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
   }
 
   # INITIALIZATION --------------------------------------
-
   # Initialize the parameter vector with a glm
   mod.init <- glm(y ~ 0 + X, family=fam)
   beta.init <- coef(mod.init)
@@ -131,8 +132,7 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
     score <- matrix(0, nrow=p_df)
     hess <- matrix(0, nrow=p_df, ncol=p_df)
 
-    for(i in 1:m){
-
+    for(i in ids){
       # SUBSET THE DATA ---------------------------------
       indices <- id == i
       X_i <- X[indices, ]
@@ -227,7 +227,7 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
 
     # NEWTON RAPHSON: UPDATE BETA ----------------------
     beta.new <- beta - solve(hess) %*% score
-    if(any(is.nan(beta.new))) stop("NaNs in betas. Diverged.")
+    if(any(is.nan(beta.new))) break("NaNs in betas. Diverged.")
 
     # LASSO: SOFT THRESHOLDING ON THE BETAS ------------
     if(lasso){
@@ -261,7 +261,7 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
     }
 
     error <- sqrt(sum((beta.new - beta)**2))
-    cat("Error: ", error, "\n")
+    if(verbose) cat("Error: ", error, "\n")
     beta <- beta.new
     iter <- iter + 1
 
@@ -271,83 +271,87 @@ fit.gee <- function(y, X, id, link='identity', corstr='independence',
 
   # SANDWICH VARIANCE ESTIMATION ----------------------
 
-  cat("Computing sandwich variance", "\n")
 
-  model_based <- matrix(data=0, nrow=p_df, ncol=p_df)
-  empirical <- matrix(data=0, nrow=p_df, ncol=p_df)
+  if(variance){
+    cat("Computing sandwich variance", "\n")
+    model_based <- matrix(data=0, nrow=p_df, ncol=p_df)
+    empirical <- matrix(data=0, nrow=p_df, ncol=p_df)
 
-  for(i in 1:m){
+    for(i in ids){
 
-    # SUBSET THE DATA ---------------------------------
-    indices <- id == i
-    X_i <- X[indices, ]
-    if(sum(indices) == 1) X_i <- t(as.matrix(X_i))
-    y_i <- y[indices]
-    ni <- length(y_i)
+      # SUBSET THE DATA ---------------------------------
+      indices <- id == i
+      X_i <- X[indices, ]
+      if(sum(indices) == 1) X_i <- t(as.matrix(X_i))
+      y_i <- y[indices]
+      ni <- length(y_i)
 
-    # Get the linear predictor
-    nu_i <- X_i %*% beta
+      # Get the linear predictor
+      nu_i <- X_i %*% beta
 
-    if(normal){
+      if(normal){
 
-      # RESIDUAL
-      res_i <- y_i - nu_i
+        # RESIDUAL
+        res_i <- y_i - nu_i
 
-      if(indep){
+        if(indep){
 
-        # ** INDEPENDENT NORMAL **
-        # ------------------------
+          # ** INDEPENDENT NORMAL **
+          # ------------------------
+
+          # Calculate model-based and empirical variance
+          model_based <- model_based + t(X_i) %*% X_i
+          empirical <- empirical + t(X_i) %*% res_i %*% t(res_i) %*% X_i
+
+        } else {
+
+          # ** EXCHANGEABLE NORMAL **
+          # -------------------------
+
+          # Calculate the variance
+          # matrix with correlations
+          R_i <- matrix(alpha, nrow=ni, ncol=ni)
+          diag(R_i) <- 1
+          Vm_i <- diag(ni) * phi
+          V_i <- sqrtm(Vm_i) %*% R_i %*% sqrtm(Vm_i)
+
+          # inverse to save computational time
+          V_ii <- solve(V_i)
+
+          # Calculate model-based and empirical variance
+          model_based <- model_based + t(X_i) %*% V_ii %*% X_i
+          empirical <- empirical + t(X_i) %*% V_ii %*% res_i %*% t(res_i) %*% V_ii %*% X_i
+
+        }
+      } else {
+
+        # ** INDEPENDENT LOGISTIC **
+        # --------------------------
+
+        # MEAN FUNCTION
+        mu_i <- exp(nu_i)/(1 + exp(nu_i))
+        mu_i2 <- mu_i * (1 - mu_i)
+
+        # RESIDUAL
+        res_i <- y_i - mu_i
+
+        if(ni==1){
+          Dt <- as.numeric(mu_i2) * X_i
+        } else {
+          Dt <- diag(as.vector(mu_i2)) %*% X_i
+        }
 
         # Calculate model-based and empirical variance
-        model_based <- model_based + t(X_i) %*% X_i
+        model_based <- model_based + t(X_i) %*% Dt
         empirical <- empirical + t(X_i) %*% res_i %*% t(res_i) %*% X_i
 
-      } else {
-
-        # ** EXCHANGEABLE NORMAL **
-        # -------------------------
-
-        # Calculate the variance
-        # matrix with correlations
-        R_i <- matrix(alpha, nrow=ni, ncol=ni)
-        diag(R_i) <- 1
-        Vm_i <- diag(ni) * phi
-        V_i <- sqrtm(Vm_i) %*% R_i %*% sqrtm(Vm_i)
-
-        # inverse to save computational time
-        V_ii <- solve(V_i)
-
-        # Calculate model-based and empirical variance
-        model_based <- model_based + t(X_i) %*% V_ii %*% X_i
-        empirical <- empirical + t(X_i) %*% V_ii %*% res_i %*% t(res_i) %*% V_ii %*% X_i
-
       }
-    } else {
-
-      # ** INDEPENDENT LOGISTIC **
-      # --------------------------
-
-      # MEAN FUNCTION
-      mu_i <- exp(nu_i)/(1 + exp(nu_i))
-      mu_i2 <- mu_i * (1 - mu_i)
-
-      # RESIDUAL
-      res_i <- y_i - mu_i
-
-      if(ni==1){
-        Dt <- as.numeric(mu_i2) * X_i
-      } else {
-        Dt <- diag(as.vector(mu_i2)) %*% X_i
-      }
-
-      # Calculate model-based and empirical variance
-      model_based <- model_based + t(X_i) %*% Dt
-      empirical <- empirical + t(X_i) %*% res_i %*% t(res_i) %*% X_i
-
     }
-  }
 
-  covar <- solve(model_based) %*% empirical %*% solve(model_based)
+    covar <- solve(model_based) %*% empirical %*% solve(model_based)
+  } else {
+    covar <- NA
+  }
 
   print("Exiting.")
   if(success){
