@@ -35,7 +35,7 @@ sim_norm_logit <- function (n_sub = 50, min_obs = 1, max_obs = 6,
   beta <- matrix(beta, nrow = n_pred, ncol = 1)
   id_vec <- vector()
   measure_idx_vec <-vector()
-  err_vec < - vector()
+  err_vec <- vector()
   X <- matrix(, nrow = 0, ncol = n_pred)
   Y_binom <- vector()
   
@@ -100,11 +100,12 @@ sim_norm_logit <- function (n_sub = 50, min_obs = 1, max_obs = 6,
     }
   }
   
+  SNR <- sqrt(t(X %*% beta) %*% X %*% beta / (length(id_vec) * sigma_Y ^ 2))
+  
   if (link == 'identity') {
     # generate outcome Y
     Y <- X %*% beta + err_vec
     # calculate signal - to - noise ratio
-    SNR <- sqrt(t(X %*% beta) %*% X %*% beta / (length(Y) * sigma_Y ^ 2))
   }
   
   if (link == 'logit') {
