@@ -18,7 +18,7 @@ CONSTRAIN="-rho 100"
 
 # This will do the number of simulations
 # passed to this script as the first arg
-for i in $seq($1 1 $2)
+for i in $(seq $1 1 $2)
 do
   ARGS="${ARGS} -sim ${i}"
   for N in 100 250
