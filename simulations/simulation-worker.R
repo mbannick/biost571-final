@@ -27,16 +27,16 @@ sigma_X <- 1
 sigma_Y <- 2
 beta_mean <- 2
 rho <- 100
-tol <- 1e-2
-maxiter <- 250
+tol <- 1e-5
+maxiter <- 500
 
 # SIMULATION PARAMETERS
-n_sub.list <- c(100)
+n_sub.list <- c(80)
 min_obs.list <- c(2)
 str_X.list <- c("independence", "block")
-fit_link.list <- c("identity", "logit")
-alpha_obs.list <- c(0.4)
-n_pred.list <- c(80)
+fit_link.list <- c("logit")
+alpha_obs.list <- c(0.3, 0.9)
+n_pred.list <- c(20, 40)
 gamma.list <- c(NA, 1, 2)
 lambda.list <- c(0, 0.5, 1, 1.5)
 constrain.list <- c(F, T)
@@ -236,7 +236,7 @@ for(n_sub in n_sub.list){
 }
 
 # Create a unique filename for the simulation
-filename <- paste0("simulation_", sim, ".csv")
+filename <- paste0("simulation_more_", sim, ".csv")
 
 # Save data
 write.csv(df, paste0(directory, filename))
